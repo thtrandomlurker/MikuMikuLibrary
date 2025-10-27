@@ -279,6 +279,8 @@ public abstract partial class Node<T> : INode where T : class
     {
         if (mParent != null && mParent.Flags.HasFlag(NodeFlags.Remove))
             mParent.Nodes.Remove(this);
+        if (Control != null)
+            Control.Refresh();
     }
 
     public void Import(string filePath)

@@ -9,6 +9,7 @@ using MikuMikuModel.Nodes.Databases;
 using MikuMikuModel.Nodes.IO;
 using MikuMikuModel.Nodes.Sprites;
 using MikuMikuModel.Resources;
+using Ookii.Dialogs.WinForms;
 
 namespace MikuMikuModel.Nodes.Textures;
 
@@ -153,6 +154,25 @@ public class TextureSetNode : BinaryFileNode<TextureSet>
             return any;
         }, Keys.None, CustomHandlerFlags.Repopulate | CustomHandlerFlags.ClearMementos);
 
+        AddCustomHandlerSeparator();
+
+        AddDirtyCustomHandler("Add Toon Curve Generator Texture", () =>
+        {
+            using (InputDialog dialog = new InputDialog() { WindowTitle = "Texture Name", Input = "F_DIVA_TONECURVE_001"})
+            {
+                if (dialog.ShowDialog() == DialogResult.OK)
+                {
+                    string name = dialog.Input;
+                    ToonCurveGeneratorTexture tex = new ToonCurveGeneratorTexture();
+                    tex.Name = name;
+                    tex.Id = MurmurHash.Calculate(name);
+                    Data.Textures.Add(tex);
+                    return true;
+                }
+            }
+            return false;
+        }, Keys.None, CustomHandlerFlags.Repopulate | CustomHandlerFlags.ClearMementos);
+
         base.Initialize();
     }
 
@@ -176,7 +196,7 @@ public class TextureSetNode : BinaryFileNode<TextureSet>
                 mTextureDatabaseNode = textureDatabaseNode;
             }
         }
-
+        
         Nodes.Add(new ListNode<Texture>("Textures", Data.Textures, x => x.Name));
     }
 

@@ -6,6 +6,7 @@ using MikuMikuModel.Mementos;
 using MikuMikuModel.Nodes.Objects;
 using MikuMikuModel.Nodes.TypeConverters;
 using MikuMikuModel.Resources;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace MikuMikuModel.Nodes.Materials;
 

@@ -106,9 +106,10 @@ public partial class TextureViewControl : UserControl
         SetControlBackground();
     }
 
-    public void SetTexture(Texture texture)
+    public void SetTexture(Texture texture, bool force = false)
     {
-        if (mTexture == texture)
+
+        if (mTexture == texture & !force)
             return;
 
         DisposeBitmaps();

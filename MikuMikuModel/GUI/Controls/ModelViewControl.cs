@@ -136,12 +136,12 @@ public class ModelViewControl : GLControl
         set => mBackgroundColor = new Vector4(value.R, value.G, value.B, value.A) / 255.0f;
     }
 
-    public void SetModel(ObjectSet objectSet, TextureSet textureSet)
+    public void SetModel(ObjectSet objectSet, TextureSet textureSet, bool keepCamera = false)
     {
         if (!CanRender)
             return;
 
-        Reset();
+        Reset(keepCamera);
 
         mModel = new GLObjectSet(objectSet, textureSet);
 
@@ -154,27 +154,28 @@ public class ModelViewControl : GLControl
         }
 
         mBoundingSphere.Center /= objectSet.Objects.Count;
-
-        SetCamera(mBoundingSphere);
+        if (!keepCamera)
+            SetCamera(mBoundingSphere);
     }
 
-    public void SetModel(Object obj, TextureSet textureSet)
+    public void SetModel(Object obj, TextureSet textureSet, bool keepCamera = false)
     {
         if (!CanRender)
             return;
 
-        Reset();
+        Reset(keepCamera);
         mBoundingSphere = obj.BoundingSphere;
         mModel = new GLObject(obj, new Dictionary<uint, GLTexture>(), textureSet);
-        SetCamera(obj.BoundingSphere);
+        if (!keepCamera)
+            SetCamera(obj.BoundingSphere);
     }
 
-    public void SetModel(Mesh mesh, Object obj, TextureSet textureSet)
+    public void SetModel(Mesh mesh, Object obj, TextureSet textureSet, bool keepCamera = false)
     {
         if (!CanRender)
             return;
 
-        Reset();
+        Reset(keepCamera);
 
         var materials = new List<GLMaterial>(new GLMaterial[obj.Materials.Count]);
         var dictionary = new Dictionary<uint, GLTexture>();
@@ -187,7 +188,8 @@ public class ModelViewControl : GLControl
 
         mBoundingSphere = mesh.BoundingSphere;
         mModel = new GLMesh(mesh, materials);
-        SetCamera(mesh.BoundingSphere);
+        if (!keepCamera)
+            SetCamera(mesh.BoundingSphere);
     }
 
     private void SetCamera(BoundingSphere boundingSphere)
@@ -213,14 +215,14 @@ public class ModelViewControl : GLControl
         Invalidate();
     }
 
-    private void Reset()
+    private void Reset(bool keepCamera = false)
     {
         mModel?.Dispose();
         mModel = null;
 
         GL.Finish();
-
-        ResetCamera();
+        if (!keepCamera)
+            ResetCamera();
     }
 
     private void ResetCamera()

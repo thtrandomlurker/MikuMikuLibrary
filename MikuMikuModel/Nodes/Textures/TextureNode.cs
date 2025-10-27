@@ -124,6 +124,21 @@ public class TextureNode : Node<Texture>
             AppendCustomHandler("ATI2", () => EncodeTexture(TextureFormat.ATI2, false, true));
             AppendCustomHandler("YCbCr", () => EncodeTexture(TextureFormat.Unknown, true, true));
         }
+
+        AddCustomHandlerSeparator();
+
+        if (Data is ToonCurveGeneratorTexture tex)
+        {
+            AddCustomHandler("Edit Diffuse Curve Points", () =>
+            {
+                for (int i = 0; i < tex.DiffuseCurvePoints.Count; i++)
+                {
+                    tex.DiffuseCurvePoints[i].Offset = Random.Shared.Next() % 256;
+                }
+                tex.UpdateCurve(CurveType.Diffuse);
+                TextureViewControl.Instance.SetTexture(Data, true);
+            }, Keys.None, CustomHandlerFlags.Repopulate | CustomHandlerFlags.ClearMementos);
+        }
     }
 
     protected override void PopulateCore()

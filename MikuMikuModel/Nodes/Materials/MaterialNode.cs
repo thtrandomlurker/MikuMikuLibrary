@@ -1,5 +1,10 @@
 ﻿using MikuMikuLibrary.Geometry;
+using MikuMikuLibrary.Hashes;
 using MikuMikuLibrary.Materials;
+using MikuMikuLibrary.Textures;
+using MikuMikuModel.GUI.Controls;
+using MikuMikuModel.GUI.Forms;
+using MikuMikuModel.Nodes.Objects;
 using MikuMikuModel.Nodes.TypeConverters;
 using MikuMikuModel.Resources;
 
@@ -9,6 +14,25 @@ public class MaterialNode : Node<Material>
 {
     public override NodeFlags Flags => NodeFlags.Add | NodeFlags.Rename | NodeFlags.Remove;
     public override Bitmap Image => ResourceStore.LoadBitmap("Icons/Material.png");
+
+    public override Control Control
+    {
+        get
+        {
+            var objectParent = FindParent<ObjectNode>();
+
+            if (objectParent == null)
+                return null;
+
+            var objectSetParent = objectParent.FindParent<ObjectSetNode>();
+
+            if (objectSetParent == null)
+                return null;
+
+            ModelViewControl.Instance.SetModel(objectParent.Data, objectSetParent.Data.TextureSet);
+            return ModelViewControl.Instance;
+        }
+    }
 
     [Category("General")]
     [DisplayName("Flags")]
@@ -302,6 +326,8 @@ public class MaterialNode : Node<Material>
                 Populate();
 
             Nodes.Add(materialTextureNode);
+
+            Control.Refresh();
         });
         AddCustomHandlerSeparator();
         AddCustomHandler("Enable transparency", () =>
@@ -315,6 +341,29 @@ public class MaterialNode : Node<Material>
             AlphaTexture = true;
             PunchThrough = true;
         });
+
+        AddCustomHandlerSeparator();
+
+        AddCustomHandler("Edit Curve Texture", () =>
+        {
+            var objsetParent = FindParent<ObjectSetNode>();
+            var objParent = FindParent<ObjectNode>();
+
+            foreach (var matTex in Data.MaterialTextures)
+            {
+                if(matTex.TextureId != 0xFFFFFFFF && matTex.TextureId != MurmurHash.Calculate("NULL"))
+                {
+                    if (objsetParent.Data.TextureSet.Textures.First(x => x.Id == matTex.TextureId) is ToonCurveGeneratorTexture tex)
+                    {
+                        ToonCurveEditorForm form = new ToonCurveEditorForm(tex, objParent.Data, objsetParent.Data.TextureSet);
+                        form.Show();
+                    }
+                }
+            }
+
+            Control.Refresh();
+
+        }, Keys.None, CustomHandlerFlags.Repopulate | CustomHandlerFlags.ClearMementos);
     }
 
     protected override void PopulateCore()
@@ -369,7 +418,12 @@ public class MaterialNode : Node<Material>
 
             else
                 Data.Flags &= ~(flags);
-        }
+        } 
+    }
+
+    protected override void OnPropertyChanged([CallerMemberName] string propertyName = null)
+    {
+        Control.Refresh();
     }
 
     public MaterialNode(string name, Material data) : base(name, data)
