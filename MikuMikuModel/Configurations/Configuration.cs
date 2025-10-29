@@ -2,6 +2,7 @@
 using MikuMikuLibrary.Bones;
 using MikuMikuLibrary.Databases;
 using MikuMikuLibrary.IO;
+using MikuMikuLibrary.Lights;
 using MikuMikuModel.Resources;
 
 namespace MikuMikuModel.Configurations;
@@ -20,6 +21,12 @@ public class Configuration : ICloneable, IEquatable<Configuration>
     public string TextureDatabaseFilePath { get; set; }
     public string BoneDataFilePath { get; set; }
     public string MotionDatabaseFilePath { get; set; }
+    public Vector4 LightPosition { get; set; } = new(1.50000f, 2.80000f, 2.00000f, 0.00000f);
+    public Vector4 LightAmbientColor { get; set; } = new(1.00000f, 1.04000f, 1.00000f, 1.00000f);
+    public Vector4 LightDiffuseColor { get; set; } = new(1.16000f, 1.16000f, 1.16000f, 1.00000f);
+    public Vector4 LightSpecularColor { get; set; } = new(1.80000f, 1.80000f, 1.80000f, 1.00000f);
+    public Vector4 LightFresnelColor { get; set; } = new(0.50000f, 0.50000f, 0.50000f, 1.00000f);
+    public Vector3 LightToneCurve { get; set; } = new(0.00000f, 0.00000f, 0.00000f);
 
     public DirectoryInfo BaseDirectory => new(ResourceStore.GetPath(Path.Combine("Configurations", Name)));
 
@@ -69,7 +76,14 @@ public class Configuration : ICloneable, IEquatable<Configuration>
             ObjectDatabaseFilePath = ObjectDatabaseFilePath,
             TextureDatabaseFilePath = TextureDatabaseFilePath,
             BoneDataFilePath = BoneDataFilePath,
-            MotionDatabaseFilePath = MotionDatabaseFilePath
+            MotionDatabaseFilePath = MotionDatabaseFilePath,
+            LightAmbientColor = LightAmbientColor,
+            LightDiffuseColor = LightDiffuseColor,
+            LightSpecularColor = LightSpecularColor,
+            LightFresnelColor = LightFresnelColor,
+            LightPosition = LightPosition,
+            LightToneCurve = LightToneCurve
+
         };
     }
 
@@ -79,7 +93,13 @@ public class Configuration : ICloneable, IEquatable<Configuration>
                StringEquals(other.ObjectDatabaseFilePath, ObjectDatabaseFilePath) &&
                StringEquals(other.TextureDatabaseFilePath, TextureDatabaseFilePath) &&
                StringEquals(other.BoneDataFilePath, BoneDataFilePath) &&
-               StringEquals(other.MotionDatabaseFilePath, MotionDatabaseFilePath);
+               StringEquals(other.MotionDatabaseFilePath, MotionDatabaseFilePath) &&
+               other.LightAmbientColor == LightAmbientColor &&
+               other.LightDiffuseColor == LightDiffuseColor &&
+               other.LightSpecularColor == LightSpecularColor &&
+               other.LightFresnelColor == LightFresnelColor &&
+               other.LightPosition == LightPosition &&
+               other.LightToneCurve == LightToneCurve;
 
         bool StringEquals(string left, string right) =>
             (string.IsNullOrEmpty(left) && string.IsNullOrEmpty(right)) || left == right;
@@ -193,5 +213,7 @@ public class Configuration : ICloneable, IEquatable<Configuration>
     static Configuration()
     {
         sSerializers = new Dictionary<Type, XmlSerializer>();
+
+        
     }
 }

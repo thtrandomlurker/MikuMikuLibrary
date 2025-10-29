@@ -2,6 +2,7 @@
 using System.Threading;
 using MikuMikuLibrary.Hashes;
 using MikuMikuLibrary.IO;
+using MikuMikuLibrary.Lights;
 using MikuMikuLibrary.Motions;
 using MikuMikuLibrary.Objects;
 using MikuMikuLibrary.Objects.Extra.Parameters;
@@ -163,6 +164,32 @@ public partial class MainForm : Form
     public void OpenFile(string filePath)
     {
         Enabled = false;
+
+        string fileName = Path.GetFileName(filePath);
+
+        if (fileName.StartsWith("light_"))
+        {
+            if (fileName.EndsWith(".txt"))
+            {
+                if (ConfigurationList.Instance.CurrentConfiguration != null)
+                {
+                    LightParameter param = BinaryFile.Load<LightParameter>(filePath);
+
+                    ConfigurationList.Instance.CurrentConfiguration.LightPosition = param.Groups[0].Lights[0].Position;
+                    ConfigurationList.Instance.CurrentConfiguration.LightDiffuseColor = param.Groups[0].Lights[0].Diffuse;
+                    ConfigurationList.Instance.CurrentConfiguration.LightAmbientColor = param.Groups[0].Lights[0].Ambient;
+                    ConfigurationList.Instance.CurrentConfiguration.LightSpecularColor = param.Groups[0].Lights[0].Specular;
+                    ConfigurationList.Instance.CurrentConfiguration.LightToneCurve = param.Groups[0].Lights[0].ToneCurve;
+                    ConfigurationList.Instance.CurrentConfiguration.LightFresnelColor = param.Groups[0].Lights[5].Ambient;
+
+                    ConfigurationList.Instance.Save();
+
+                    Enabled = true;
+
+                    return;
+                }
+            }
+        }
 
         try
         {
@@ -433,7 +460,7 @@ public partial class MainForm : Form
             }
 
             var rootController = rootMotion.Bind();
-            for (int i = 1;; i++)
+            for (int i = 1; ; i++)
             {
                 string divFilePath = $"{baseFilePath}_div_{i}.mot";
                 if (!File.Exists(divFilePath))
@@ -483,7 +510,7 @@ public partial class MainForm : Form
             return;
 
         using (var folderBrowserDialog = new VistaFolderBrowserDialog
-                   { Description = "Select a folder to save file(s) to.", UseDescriptionForTitle = true })
+        { Description = "Select a folder to save file(s) to.", UseDescriptionForTitle = true })
         {
             if (folderBrowserDialog.ShowDialog(this) != DialogResult.OK)
                 return;
@@ -531,7 +558,7 @@ public partial class MainForm : Form
     private void OnUserGuide(object sender, EventArgs e)
     {
         Process.Start(new ProcessStartInfo("https://github.com/blueskythlikesclouds/MikuMikuLibrary/wiki/Miku-Miku-Model")
-            { UseShellExecute = true });
+        { UseShellExecute = true });
     }
 
     private async void CheckForUpdates(bool notifyOnFail)
@@ -568,10 +595,10 @@ public partial class MainForm : Form
                             return;
 
                         Process.Start(new ProcessStartInfo("https://github.com/blueskythlikesclouds/MikuMikuLibrary/releases")
-                            { UseShellExecute = true });
+                        { UseShellExecute = true });
                     });
                 }
-                
+
                 else if (notifyOnFail)
                 {
                     Invoke(() =>
@@ -701,7 +728,7 @@ public partial class MainForm : Form
     {
         using var folderDialog = new VistaFolderBrowserDialog
         {
-            Description = "Select a folder to convert all object sets inside.", 
+            Description = "Select a folder to convert all object sets inside.",
             UseDescriptionForTitle = true,
         };
 

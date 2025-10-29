@@ -1,5 +1,7 @@
 #version 330
 
+#define saturate(x) clamp(x, 0.0, 1.0)
+
 out vec4 oColor;
 
 in vec3 fPosition;
@@ -38,9 +40,22 @@ uniform int uAnisoDirection;
 uniform bool uPunchThrough;
 
 uniform vec3 uViewPosition;
-uniform vec3 uLightPosition;
+
+uniform vec4 uLightPosition;
+uniform vec4 uLightAmbient;
+uniform vec4 uLightDiffuse;
+uniform vec4 uLightSpecular;
+uniform vec4 uLightFresnel;
+uniform vec3 uLightToneCurve;
 
 const float ALPHA_THRESHOLD = 0.5;
+
+vec4 divsq(vec4 a, float b)
+{
+	vec4 tmp = a / sqrt(abs(b));
+	vec4 choice = abs(a);
+	return mix(a, tmp, vec4(choice.x > 0, choice.y > 0, choice.z > 0, choice.w > 0));
+}
 
 vec2 yccLookup(float x)
 {
@@ -80,7 +95,7 @@ vec3 yccToneMap(vec3 c)
 void standard()
 {
     vec3 viewDirection = normalize(uViewPosition - fPosition);
-    vec3 lightDirection = normalize(uLightPosition - fPosition);
+    vec3 lightDirection = normalize(uViewPosition - uLightPosition.xyz);
     vec3 halfwayDirection = normalize(viewDirection + lightDirection);
 
     vec4 diffuseColor = uDiffuseColor;
@@ -152,7 +167,7 @@ void standard()
 
 void chara()
 {
-    vec4 diffuse = texture(uDiffuseTexture, fTexCoord0);
+    /*vec4 diffuse = texture(uDiffuseTexture, fTexCoord0);
 
     if (uPunchThrough && diffuse.a < ALPHA_THRESHOLD)
         discard;
@@ -161,7 +176,6 @@ void chara()
 
     vec3 normal = normalize(fNormal);
     vec3 viewDirection = normalize(uViewPosition - fPosition);
-    vec3 lightDirection = normalize(uLightPosition - fPosition);
     vec3 halfwayDirection = normalize(viewDirection + lightDirection);
 
     if (uAnisoDirection > 0)
@@ -183,7 +197,89 @@ void chara()
     
     vec3 fresnelLighting = fresnelToonCurve * specular.a * 0.431;
 
-    oColor = vec4(pow(clamp(diffuseLighting + specularLighting + fresnelLighting, 0, 1), vec3(0.625)), diffuse.a);
+    oColor = vec4(pow(clamp(diffuseLighting + specularLighting + fresnelLighting, 0, 1), vec3(0.625)), diffuse.a);*/
+
+    vec3 lightDirection = normalize(vec3(0,0,0) + uLightPosition.xyz);
+    
+    vec3 viewDirection = normalize(uViewPosition - fPosition);
+
+    float diffuseToneCurveOfs = 0.875;
+
+    vec3 halfwayDirection = viewDirection + lightDirection;
+
+    if (uAnisoDirection > 0)
+        halfwayDirection = normalize(viewDirection + vec3(0, 1, 0));
+
+    vec3 normal = normalize(fNormal);
+
+    float nDotL = dot(normal, lightDirection);
+
+    vec3 nHalfwayDirection = normalize(halfwayDirection);
+    float cond = nDotL;
+
+    float nDotV = saturate(dot(normal, viewDirection));
+    float nDotL_adj = (nDotL + 1) * 0.5;
+
+    vec4 specularTex = texture(uSpecularTexture, fTexCoord0);
+    specularTex.rgb *= specularTex.rgb;
+    float nNdotLadj = saturate(-nDotL + 1);
+
+    vec3 fresnelColor = specularTex.w * (uLightFresnel.rgb * 0.8);
+
+    float nDotH = saturate(dot(normal, nHalfwayDirection));
+
+    float nNdotLadjadj = nNdotLadj * nNdotLadj;
+
+    float specularToneCurveOfs = 0.625;
+
+    nDotL = nNdotLadjadj * nNdotLadjadj;
+
+    //vec3 emissionColor = g_material_state_emission.rgb;
+
+    vec3 specularCol = -nDotL * specularTex.xyz + specularTex.xyz;
+	
+	vec3 lightDir = normalize(lightDirection);
+
+    specularCol.xyz *= uLightSpecular.rgb;
+
+    if (cond > 0 || uAnisoDirection > 0) {
+      vec3 specularToneCurve = texture(uToonCurveTexture, vec2(nDotH, specularToneCurveOfs)).rgb;
+      specularCol *= specularToneCurve;
+    }
+
+    vec3 diffuseToneCurve = texture(uToonCurveTexture, vec2(nDotL_adj, diffuseToneCurveOfs)).rgb;
+
+    // for the tonecurve it sets R2.w to R3.w - tone_curve.xxxx.w
+    // then it sets r1.x to saturate(r2.w * tone_curve.yyyy.x)
+    // last it does is R3.xyz = R1.xyz * pr
+    if (uLightToneCurve.z > 0.0) {
+	    float toneStart = nDotL - uLightToneCurve.x;
+	    float toneDepth = saturate(toneStart * uLightToneCurve.y);
+	    
+	    vec3 toneColor = toneDepth * -uLightAmbient.xyz + toneDepth;
+	    toneColor += uLightAmbient.xyz;
+	    diffuseToneCurve = (toneColor - diffuseToneCurve) * uLightToneCurve.z + diffuseToneCurve;
+    }
+
+    float nNdotVadj = -nDotV + 1;
+    vec4 diffuseTex = texture(uDiffuseTexture, fTexCoord0);
+
+    if (uPunchThrough && diffuseTex.a < ALPHA_THRESHOLD)
+        discard;
+
+    vec3 diffuseCol = (diffuseToneCurve.xyz * uLightDiffuse.rgb);
+
+    float fresnelToneCurveOfs = 0.375;
+
+    vec3 fresnelToneCurve = texture(uToonCurveTexture, vec2(nNdotVadj, fresnelToneCurveOfs)).xyz;
+
+    vec3 directLighting = fresnelToneCurve * fresnelColor + specularCol;
+
+    vec3 combinedLighting = (diffuseCol * diffuseTex.xyz + directLighting);
+
+    oColor = vec4(yccToneMap(combinedLighting), diffuseTex.a);
+	//stencil_depth_target = float4(0, frg_position.z, 0, 0);
+    return;
 }
 
 void main()

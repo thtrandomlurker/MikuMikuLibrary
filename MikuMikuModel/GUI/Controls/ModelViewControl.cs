@@ -1,6 +1,7 @@
 ﻿using MikuMikuLibrary.Geometry;
 using MikuMikuLibrary.Objects;
 using MikuMikuLibrary.Textures;
+using MikuMikuModel.Configurations;
 using MikuMikuModel.GUI.Controls.ModelView;
 using MikuMikuModel.Resources.Styles;
 using OpenTK.Graphics.OpenGL;
@@ -30,6 +31,13 @@ public class ModelViewControl : GLControl
         
     private readonly GLShaderProgram mDefaultShader;
     private readonly GLShaderProgram mGridShader;
+
+    private Vector4 mDefaultLightPosition = new(1.50000f, 2.80000f, 2.00000f, 0.00000f);
+    private Vector4 mDefaultLightAmbient = new(1.00000f, 1.04000f, 1.00000f, 1.00000f);
+    private Vector4 mDefaultLightDiffuse = new(1.16000f, 1.16000f, 1.16000f, 1.00000f);
+    private Vector4 mDefaultLightSpecular = new(1.80000f, 1.80000f, 1.80000f, 1.00000f);
+    private Vector4 mDefaultLightFresnel = new(0.50000f, 0.50000f, 0.50000f, 1.00000f);
+    private Vector3 mDefaultLightToneCurve = new(0.00000f, 0.00000f, 0.00000f);
 
     private Vector4 mBackgroundColor = new(0.827f, 0.827f, 0.827f, 1.0f);
 
@@ -440,6 +448,25 @@ public class ModelViewControl : GLControl
         {
             mDefaultShader.SetUniform("uViewPosition", mCamPosition);
             mDefaultShader.SetUniform("uLightPosition", mCamPosition);
+        }
+
+        if (ConfigurationList.Instance.CurrentConfiguration != null)
+        {
+            mDefaultShader.SetUniform("uLightPosition", ConfigurationList.Instance.CurrentConfiguration.LightPosition);
+            mDefaultShader.SetUniform("uLightAmbient", ConfigurationList.Instance.CurrentConfiguration.LightAmbientColor);
+            mDefaultShader.SetUniform("uLightDiffuse", ConfigurationList.Instance.CurrentConfiguration.LightDiffuseColor);
+            mDefaultShader.SetUniform("uLightSpecular", ConfigurationList.Instance.CurrentConfiguration.LightSpecularColor);
+            mDefaultShader.SetUniform("uLightFresnel", ConfigurationList.Instance.CurrentConfiguration.LightFresnelColor);
+            mDefaultShader.SetUniform("uLightToneCurve", ConfigurationList.Instance.CurrentConfiguration.LightToneCurve);
+        }
+        else
+        {
+            mDefaultShader.SetUniform("uLightPosition", mDefaultLightPosition);
+            mDefaultShader.SetUniform("uLightAmbient", mDefaultLightAmbient);
+            mDefaultShader.SetUniform("uLightDiffuse", mDefaultLightDiffuse);
+            mDefaultShader.SetUniform("uLightSpecular", mDefaultLightSpecular);
+            mDefaultShader.SetUniform("uLightFresnel", mDefaultLightFresnel);
+            mDefaultShader.SetUniform("uLightToneCurve", mDefaultLightToneCurve);
         }
 
         mOpaqueDrawCommands.Clear();
