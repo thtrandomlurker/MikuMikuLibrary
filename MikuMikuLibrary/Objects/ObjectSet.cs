@@ -149,7 +149,7 @@ public class ObjectSet : BinaryFile
         writer.Write(TextureIds.Count);
     }
 
-    public void Load(Stream source, TextureSet textureSet, TextureDatabase textureDatabase, bool leaveOpen = false)
+    public void Load(Stream source, TextureSet textureSet, TextureDatabase textureDatabase, bool leaveOpen = false, ToonCurveDatabase toonCurveDatabase = null)
     {
         Load(source, leaveOpen);
 
@@ -166,11 +166,35 @@ public class ObjectSet : BinaryFile
             if (textureInfo != null)
                 TextureSet.Textures[i].Name = textureInfo.Name;
         }
+        
+        if (toonCurveDatabase != null)
+        {
+            foreach (var toonCurve in toonCurveDatabase.ToonCurves)
+            {
+                int texIndex = TextureSet.Textures.FindIndex(x => x.Id == toonCurve.Id);
+
+                ToonCurveGeneratorTexture tex = new ToonCurveGeneratorTexture();
+                tex.DiffuseCurvePoints.Clear();
+                tex.SpecularCurvePoints.Clear();
+                tex.FresnelCurvePoints.Clear();
+                tex.Id = toonCurve.Id;
+                tex.Name = toonCurve.Name;
+                tex.DiffuseCurvePoints.AddRange(toonCurve.DiffuseCurvePoints);
+                tex.SpecularCurvePoints.AddRange(toonCurve.SpecularCurvePoints);
+                tex.FresnelCurvePoints.AddRange(toonCurve.FresnelCurvePoints);
+                tex.UpdateCurve(CurveType.Diffuse);
+                tex.UpdateCurve(CurveType.Specular);
+                tex.UpdateCurve(CurveType.Fresnel);
+
+                TextureSet.Textures[texIndex] = tex;
+            }
+        }
     }
 
     public void Load(string filePath, ObjectDatabase objectDatabase, TextureDatabase textureDatabase)
     {
         string textureSetFilePath = string.Empty;
+        string toonCurveDatabaseFilePath = string.Empty;
 
         var objectSetInfo = objectDatabase?.GetObjectSetInfoByFileName(Path.GetFileName(filePath));
 
@@ -186,13 +210,26 @@ public class ObjectSet : BinaryFile
                 textureSetFilePath = Path.ChangeExtension(filePath, "txd");
         }
 
+
+        if (filePath.EndsWith("_obj.bin", StringComparison.OrdinalIgnoreCase))
+            toonCurveDatabaseFilePath = $"{filePath.Substring(0, filePath.Length - 8)}_tci.bin";
+
+        else if (filePath.EndsWith(".osd", StringComparison.OrdinalIgnoreCase))
+            toonCurveDatabaseFilePath = Path.ChangeExtension(filePath, "tci");
+
         TextureSet textureSet = null;
+
+        ToonCurveDatabase toonCurveDatabase = null;
 
         if (File.Exists(textureSetFilePath))
             textureSet = Load<TextureSet>(textureSetFilePath);
+        if (File.Exists(toonCurveDatabaseFilePath))
+        {
+            toonCurveDatabase = Load<ToonCurveDatabase>(toonCurveDatabaseFilePath);
+        }
 
-        using (var source = File.OpenRead(filePath))
-            Load(source, textureSet, textureDatabase);
+            using (var source = File.OpenRead(filePath))
+            Load(source, textureSet, textureDatabase, false, toonCurveDatabase);
     }
 
     public override void Load(string filePath)

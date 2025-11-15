@@ -112,6 +112,34 @@ public class TextureSet : BinaryFile
             textureDatabase.Save(Path.ChangeExtension(filePath, "txi"));
         }
 
+        // and if there's any TCGTextures, let's write a simple DB.
+        if (Textures.Any(x => x is ToonCurveGeneratorTexture))
+        {
+            ToonCurveDatabase toonCurveDatabase = new ToonCurveDatabase();
+            foreach (var texture in Textures.Where(x => x is ToonCurveGeneratorTexture))
+            {
+                ToonCurveGeneratorTexture tcgtexture = texture as ToonCurveGeneratorTexture;
+                ToonCurveInfo toonCurveInfo = new ToonCurveInfo();
+                toonCurveInfo.Id = texture.Id;
+                toonCurveInfo.Name = texture.Name;
+                toonCurveInfo.DiffuseCurvePoints.AddRange(tcgtexture.DiffuseCurvePoints);
+                toonCurveInfo.SpecularCurvePoints.AddRange(tcgtexture.SpecularCurvePoints);
+                toonCurveInfo.FresnelCurvePoints.AddRange(tcgtexture.FresnelCurvePoints);
+                toonCurveDatabase.ToonCurves.Add(toonCurveInfo);
+            }
+
+            toonCurveDatabase.Format = Format;
+            toonCurveDatabase.Endianness = Endianness;
+            if (filePath.EndsWith(".txd", StringComparison.OrdinalIgnoreCase))
+            {
+                toonCurveDatabase.Save(Path.ChangeExtension(filePath, "tci"));
+            }
+            else
+            {
+                toonCurveDatabase.Save(filePath.Replace("_tex.bin", "_tci.bin"));
+            }
+        }
+
         base.Save(filePath);
     }
 
