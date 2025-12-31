@@ -1,4 +1,5 @@
 ﻿using MikuMikuLibrary.Archives;
+using MikuMikuLibrary.Bones;
 using MikuMikuLibrary.Extensions;
 using MikuMikuLibrary.IO;
 using MikuMikuLibrary.IO.Common;
@@ -13,6 +14,8 @@ using MikuMikuModel.GUI.Forms;
 using MikuMikuModel.Modules;
 using MikuMikuModel.Nodes.Collections;
 using MikuMikuModel.Nodes.IO;
+using OpenTK.Graphics.OpenGL;
+using System.Transactions;
 
 namespace MikuMikuModel.Nodes.Objects;
 
@@ -386,6 +389,282 @@ public class SkinNode : Node<Skin>
                 }
             }
         }, Keys.None, CustomHandlerFlags.ClearMementos | CustomHandlerFlags.Repopulate);
+
+        AddCustomHandler("Create base skin parameter", () =>
+        {
+            List<OsageCollisionParameter> collisionParameters = new List<OsageCollisionParameter>();
+
+            int sumNumVertices = 0;
+
+            foreach (var mesh in FindParent<ObjectNode>().Data.Meshes)
+            {
+                sumNumVertices += mesh.Positions.Length;
+            }
+
+            Vector3[] groupedVertexPositions = new Vector3[sumNumVertices];
+            Vector4[] groupedVertexWeights = new Vector4[sumNumVertices];
+            MikuMikuLibrary.Numerics.Vector4Int[] remappedVertexIndices = new MikuMikuLibrary.Numerics.Vector4Int[sumNumVertices];
+
+            int baseIndex = 0;
+
+
+            // this *might* cause some slight issues but...
+            foreach (var mesh in FindParent<ObjectNode>().Data.Meshes)
+            {
+                foreach (var submesh in mesh.SubMeshes)
+                {
+                    foreach (var index in submesh.Indices)
+                    {
+                        Console.WriteLine(index);
+                        if (submesh.PrimitiveType == MikuMikuLibrary.Objects.PrimitiveType.TriangleStrip ? index != 0xFFFF : true)
+                        {
+                            groupedVertexPositions[baseIndex + index] = mesh.Positions[index];
+                            groupedVertexWeights[baseIndex + index] = mesh.BlendWeights[index];
+                            MikuMikuLibrary.Numerics.Vector4Int oldIndices = mesh.BlendIndices[index];
+                            remappedVertexIndices[baseIndex + index] = new MikuMikuLibrary.Numerics.Vector4Int(oldIndices.X == -1 ? -1 : submesh.BoneIndices[oldIndices.X], oldIndices.Y == -1 ? -1 : submesh.BoneIndices[oldIndices.Y], oldIndices.Z == -1 ? -1 : submesh.BoneIndices[oldIndices.Z], oldIndices.W == -1 ? -1 : submesh.BoneIndices[oldIndices.W]);
+                        }
+                    }
+                }
+                baseIndex += mesh.Positions.Length;
+            }
+
+            if (ConfigurationList.Instance?.CurrentConfiguration?.BoneData != null)
+            {
+                if (ConfigurationList.Instance.CurrentConfiguration.BoneData.Skeletons.Count > 0)
+                {
+                    Skeleton cmnSkel = ConfigurationList.Instance.CurrentConfiguration.BoneData.Skeletons.First(x => x.Name == "CMN");
+                    for (int i = 0; i < Data.Bones.Count; i++)
+                    {
+                        var bone = Data.Bones[i];
+                        
+                        if (!bone.Name.StartsWith("nl_") && Data.Bones.Where(x => x.Parent?.Name == bone.Name).Count() == 1)
+                        {
+                            Matrix4x4.Invert(bone.InverseBindPoseMatrix, out var bindPoseMatrix);
+
+                            Matrix4x4.Decompose(bindPoseMatrix, out var scale, out var rotation, out var translation);
+                            rotation = Quaternion.Normalize(rotation);
+                            var child = Data.Bones.FirstOrDefault(x => x.Parent?.Name == bone.Name, null);
+                            // if this and child bones are in the list of ObjectBones, then allow collision creation.
+                            if (child != null)
+                            {
+                                if (!child.Name.StartsWith("nl_"))
+                                {
+                                    Matrix4x4.Invert(child.InverseBindPoseMatrix, out var childBindPoseMatrix);
+
+                                    Matrix4x4.Decompose(childBindPoseMatrix, out var childScale, out var childRotation, out var childTranslation);
+                                    childRotation = Quaternion.Normalize(childRotation);
+                                    if (cmnSkel.ObjectBoneNames.Contains(bone.Name) && cmnSkel.ObjectBoneNames.Contains(child.Name))
+                                    {
+                                        // MessageBox.Show($"Estimating collision param between bones {bone.Name} and {child.Name}");
+                                        OsageCollisionParameter colParam = new OsageCollisionParameter();
+                                        colParam.Bone0.Name = bone.Name;
+                                        colParam.Bone1.Name = child.Name;
+
+                                        float radiusAppx = 0.0f;
+                                        float weightSum = 0.0f;
+
+                                        for (int v = 0; v < sumNumVertices; v++)
+                                        {
+                                            for (int w = 0; w < 4; w++)
+                                            {
+                                                if (remappedVertexIndices[v][w] == i)
+                                                {
+                                                    if (groupedVertexWeights[v][w] >= 0.25)
+                                                    {
+                                                        for (int o = 0; o < 1; o++)
+                                                        {
+                                                            Vector3 samplePosition = Vector3.Lerp(translation, childTranslation, 0.5f);
+                                                            float vertexDistance = Math.Clamp(Math.Abs(Vector3.Distance(samplePosition, groupedVertexPositions[v])), 0.0f, 0.25f);
+                                                            float distanceFalloff = (1.0f / (1.0f + vertexDistance * vertexDistance));
+                                                            radiusAppx += Math.Abs(Vector3.Distance(samplePosition, groupedVertexPositions[v])) * groupedVertexWeights[v][w] * distanceFalloff;
+                                                            weightSum += groupedVertexWeights[v][w] * distanceFalloff;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        colParam.Radius = radiusAppx / weightSum;
+                                        // MessageBox.Show($"Estimated radius surrounding bone {bone.Name} was {colParam.Radius}");
+
+                                        colParam.Type = 2;
+
+                                        collisionParameters.Add(colParam);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            OsageSkinParameterSet skp = new OsageSkinParameterSet();
+            foreach (var block in Data.Blocks)
+            {
+                if (block is OsageBlock osgBlock)
+                {
+                    OsageSkinParameter param = new OsageSkinParameter();
+                    param.Name = osgBlock.ExternalName;
+                    foreach (var node in osgBlock.Nodes)
+                    {
+                        OsageNodeParameter nodeParam = new OsageNodeParameter();
+                        nodeParam.Radius = 0.082000f;
+                        nodeParam.HingeYMin = -179.000000f;
+                        nodeParam.HingeYMax = 179.000000f;
+                        nodeParam.HingeZMin = -179.000000f;
+                        nodeParam.HingeZMax = 179.000000f;
+                        nodeParam.Weight = 1.000000f;
+
+                        BoneInfo nodeBoneInfo = Data.Bones.FirstOrDefault(x => x?.Name == node.Name, null);
+
+                        if (nodeBoneInfo != null)
+                        {
+                            Matrix4x4.Invert(nodeBoneInfo.InverseBindPoseMatrix, out var nodeBindPoseMatrix);
+
+                            Matrix4x4.Decompose(nodeBindPoseMatrix, out var nodeScale, out var nodeRotation, out var nodeTranslation);
+                            nodeRotation = Quaternion.Normalize(nodeRotation);
+
+                            BoneInfo nodeChildBoneInfo = Data.Bones.FirstOrDefault(x => x.Parent?.Name == nodeBoneInfo.Name);
+
+
+                            if (nodeChildBoneInfo != null)
+                            {
+                                Matrix4x4.Invert(nodeChildBoneInfo.InverseBindPoseMatrix, out var nodeChildBindPoseMatrix);
+
+                                Matrix4x4.Decompose(nodeChildBindPoseMatrix, out var nodeChildScale, out var nodeChildRotation, out var nodeChildTranslation);
+                                nodeChildRotation = Quaternion.Normalize(nodeChildRotation);
+
+                                int nodeBoneIndex = Data.Bones.IndexOf(nodeBoneInfo);
+
+                                float radiusAppx = 0.0f;
+                                float weightSum = 0.0f;
+
+                                for (int v = 0; v < sumNumVertices; v++)
+                                {
+                                    for (int w = 0; w < 4; w++)
+                                    {
+                                        if (remappedVertexIndices[v][w] == nodeBoneIndex)
+                                        {
+                                            if (groupedVertexWeights[v][w] >= 0.25)
+                                            {
+                                                for (int o = 0; o < 1; o++)
+                                                {
+                                                    Vector3 samplePosition = Vector3.Lerp(nodeTranslation, nodeChildTranslation, 0.5f);
+                                                    float vertexDistance = Math.Clamp(Math.Abs(Vector3.Distance(samplePosition, groupedVertexPositions[v])), 0.0f, node.Length / 2);
+                                                    float distanceFalloff = (1.0f / (1.0f + vertexDistance * vertexDistance));
+                                                    radiusAppx += Math.Abs(Vector3.Distance(samplePosition, groupedVertexPositions[v])) * groupedVertexWeights[v][w] * distanceFalloff;
+                                                    weightSum += groupedVertexWeights[v][w] * distanceFalloff;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                nodeParam.Radius = radiusAppx / weightSum;
+                            }
+                            else
+                            {
+                                Vector3 nodeEnd = nodeTranslation + Vector3.Transform(Vector3.UnitX * node.Length, nodeRotation);
+
+                                int nodeBoneIndex = Data.Bones.IndexOf(nodeBoneInfo);
+
+                                float radiusAppx = 0.0f;
+                                float weightSum = 0.0f;
+
+                                for (int v = 0; v < sumNumVertices; v++)
+                                {
+                                    for (int w = 0; w < 4; w++)
+                                    {
+                                        if (remappedVertexIndices[v][w] == nodeBoneIndex)
+                                        {
+                                            if (groupedVertexWeights[v][w] >= 0.25)
+                                            {
+                                                for (int o = 0; o < 1; o++)
+                                                {
+                                                    Vector3 samplePosition = Vector3.Lerp(nodeTranslation, nodeEnd, 0.5f);
+                                                    float vertexDistance = Math.Clamp(Math.Abs(Vector3.Distance(samplePosition, groupedVertexPositions[v])), 0.0f, node.Length / 2);
+                                                    float distanceFalloff = (1.0f / (1.0f + vertexDistance * vertexDistance));
+                                                    radiusAppx += Math.Abs(Vector3.Distance(samplePosition, groupedVertexPositions[v])) * groupedVertexWeights[v][w] * distanceFalloff;
+                                                    weightSum += groupedVertexWeights[v][w] * distanceFalloff;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                nodeParam.Radius = radiusAppx / weightSum;
+                            }
+
+                            var collisionCandidates = collisionParameters.Select(colParam =>
+                            {
+                                BoneInfo colHeadBoneInfo = Data.Bones.FirstOrDefault(x => x.Name == colParam.Bone0.Name, null);
+                                BoneInfo colTailBoneInfo = Data.Bones.FirstOrDefault(x => x.Name == colParam.Bone1.Name, null);
+
+                                Matrix4x4.Invert(colHeadBoneInfo.InverseBindPoseMatrix, out var colHeadBindPoseMatrix);
+
+                                Matrix4x4.Decompose(colHeadBindPoseMatrix, out var colHeadScale, out var colHeadRotation, out var colHeadTranslation);
+                                colHeadRotation = Quaternion.Normalize(colHeadRotation);
+
+                                Matrix4x4.Invert(colTailBoneInfo.InverseBindPoseMatrix, out var colTailBindPoseMatrix);
+
+                                Matrix4x4.Decompose(colTailBindPoseMatrix, out var colTailScale, out var colTailRotation, out var colTailTranslation);
+                                colTailRotation = Quaternion.Normalize(colTailRotation);
+
+                                float headDistance = Math.Abs(Vector3.Distance(nodeTranslation, colHeadTranslation));
+                                float tailDistance = Math.Abs(Vector3.Distance(nodeTranslation, colTailTranslation));
+
+                                float avgDistance = 0.0f;
+                                for (int i = 0; i < 1; i++)
+                                {
+                                    Vector3 samplePosition = Vector3.Lerp(colHeadTranslation, colTailTranslation, 0.5f);
+                                    avgDistance += Math.Abs(Vector3.Distance(nodeTranslation, samplePosition));
+                                }
+
+
+                                return new { Parameter = colParam, HeadDistance = avgDistance / 10.0f };
+                            }).OrderBy(x => x.HeadDistance).Take(11);
+
+                            foreach (var candidate in collisionCandidates)
+                            {
+                                if (!param.Collisions.Any(x => x.Bone0.Name == candidate.Parameter.Bone0.Name || x.Bone1.Name == candidate.Parameter.Bone1.Name) && param.Collisions.Count < 11)
+                                {
+                                    param.Collisions.Add(candidate.Parameter);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            nodeParam.Radius = param.Nodes.Last().Radius;
+                        }
+                        param.Nodes.Add(nodeParam);
+                    }
+
+                    param.CollisionType = (int)OsageInternalCollisionType.Cylinder;
+
+                    param.AirResistance = 0.600000f;
+                    param.Force = 0.050000f;
+                    param.ForceGain = 0.600000f;
+                    param.Friction = 1.000000f;
+                    param.InitRotationY = 0.000000f;
+                    param.InitRotationZ = 0.000000f;
+                    param.MoveCancel = 0.000000f;
+                    param.RotationY = 0.000000f;
+                    param.RotationZ = 0.000000f;
+                    param.Stiffness = 0.000000f;
+                    param.WindAffection = 0.000000f;
+
+                    skp.Parameters.Add(param);
+
+                }
+            }
+
+            using (SaveFileDialog dlg = new SaveFileDialog() { Filter = "Skin Parameter Classic (*.txt)|*.txt|Skin Parameter Modern (*.osp)|*.osp" })
+            {
+                if (dlg.ShowDialog() == DialogResult.OK)
+                {
+                    skp.Save(dlg.FileName);
+                }
+            }
+        });
 
         AddCustomHandlerSeparator();
 
