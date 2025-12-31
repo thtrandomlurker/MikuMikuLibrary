@@ -14,8 +14,6 @@ using MikuMikuModel.GUI.Forms;
 using MikuMikuModel.Modules;
 using MikuMikuModel.Nodes.Collections;
 using MikuMikuModel.Nodes.IO;
-using OpenTK.Graphics.OpenGL;
-using System.Transactions;
 
 namespace MikuMikuModel.Nodes.Objects;
 
