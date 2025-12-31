@@ -95,7 +95,7 @@ vec3 yccToneMap(vec3 c)
 void standard()
 {
     vec3 viewDirection = normalize(uViewPosition - fPosition);
-    vec3 lightDirection = normalize(uViewPosition - uLightPosition.xyz);
+    vec3 lightDirection = normalize(vec3(0,0,0) + uLightPosition.xyz);
     vec3 halfwayDirection = normalize(viewDirection + lightDirection);
 
     vec4 diffuseColor = uDiffuseColor;
