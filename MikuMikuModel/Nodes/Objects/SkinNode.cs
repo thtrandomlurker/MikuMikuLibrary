@@ -14,6 +14,7 @@ using MikuMikuModel.GUI.Forms;
 using MikuMikuModel.Modules;
 using MikuMikuModel.Nodes.Collections;
 using MikuMikuModel.Nodes.IO;
+using System.Transactions;
 
 namespace MikuMikuModel.Nodes.Objects;
 
@@ -426,6 +427,45 @@ public class SkinNode : Node<Skin>
                 baseIndex += mesh.Positions.Length;
             }
 
+            float GetCylinderRadius(Vector3 start, Vector3 end, int boneId)
+            {
+                float radiusAppx = 0.0f;
+                float weightSum = 0.0f;
+
+                for (int v = 0; v < sumNumVertices; v++)
+                {
+                    for (int w = 0; w < 4; w++)
+                    {
+                        if (remappedVertexIndices[v][w] == boneId)
+                        {
+                            if (groupedVertexWeights[v][w] >= 0.25)
+                            {
+                                for (int o = 0; o < 1; o++)
+                                {
+                                    // find closest point along length of bone
+                                    Vector3 vertexPosition = groupedVertexPositions[v];
+                                    float t = Vector3.Dot(vertexPosition - start, end - start) / (Vector3.Distance(start, end) * Vector3.Distance(start, end));
+                                    t = Math.Clamp(t, 0, 1);
+                                    Vector3 positionAlongBoneLength = start + t * (end - start);
+
+
+                                    float distanceToBone = Vector3.Distance(vertexPosition, positionAlongBoneLength);
+
+
+                                    float falloff = (1.0f / (1.0f + distanceToBone * distanceToBone));
+                                    float effectiveWeight = groupedVertexWeights[v][w] * falloff;
+
+                                    radiusAppx += distanceToBone * effectiveWeight;
+                                    weightSum += effectiveWeight;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                return radiusAppx / weightSum;
+            }
+
             if (ConfigurationList.Instance?.CurrentConfiguration?.BoneData != null)
             {
                 if (ConfigurationList.Instance.CurrentConfiguration.BoneData.Skeletons.Count > 0)
@@ -458,34 +498,10 @@ public class SkinNode : Node<Skin>
                                         colParam.Bone0.Name = bone.Name;
                                         colParam.Bone1.Name = child.Name;
 
-                                        float radiusAppx = 0.0f;
-                                        float weightSum = 0.0f;
-
-                                        for (int v = 0; v < sumNumVertices; v++)
-                                        {
-                                            for (int w = 0; w < 4; w++)
-                                            {
-                                                if (remappedVertexIndices[v][w] == i)
-                                                {
-                                                    if (groupedVertexWeights[v][w] >= 0.25)
-                                                    {
-                                                        for (int o = 0; o < 1; o++)
-                                                        {
-                                                            Vector3 samplePosition = Vector3.Lerp(translation, childTranslation, 0.5f);
-                                                            float vertexDistance = Math.Clamp(Math.Abs(Vector3.Distance(samplePosition, groupedVertexPositions[v])), 0.0f, 0.25f);
-                                                            float distanceFalloff = (1.0f / (1.0f + vertexDistance * vertexDistance));
-                                                            radiusAppx += Math.Abs(Vector3.Distance(samplePosition, groupedVertexPositions[v])) * groupedVertexWeights[v][w] * distanceFalloff;
-                                                            weightSum += groupedVertexWeights[v][w] * distanceFalloff;
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        colParam.Radius = radiusAppx / weightSum;
+                                        colParam.Radius = GetCylinderRadius(translation, childTranslation, i);
                                         // MessageBox.Show($"Estimated radius surrounding bone {bone.Name} was {colParam.Radius}");
 
-                                        colParam.Type = 2;
+                                        colParam.Type = (int)OsageInternalCollisionType.Cylinder;
 
                                         collisionParameters.Add(colParam);
                                     }
@@ -533,63 +549,14 @@ public class SkinNode : Node<Skin>
 
                                 int nodeBoneIndex = Data.Bones.IndexOf(nodeBoneInfo);
 
-                                float radiusAppx = 0.0f;
-                                float weightSum = 0.0f;
-
-                                for (int v = 0; v < sumNumVertices; v++)
-                                {
-                                    for (int w = 0; w < 4; w++)
-                                    {
-                                        if (remappedVertexIndices[v][w] == nodeBoneIndex)
-                                        {
-                                            if (groupedVertexWeights[v][w] >= 0.25)
-                                            {
-                                                for (int o = 0; o < 1; o++)
-                                                {
-                                                    Vector3 samplePosition = Vector3.Lerp(nodeTranslation, nodeChildTranslation, 0.5f);
-                                                    float vertexDistance = Math.Clamp(Math.Abs(Vector3.Distance(samplePosition, groupedVertexPositions[v])), 0.0f, node.Length / 2);
-                                                    float distanceFalloff = (1.0f / (1.0f + vertexDistance * vertexDistance));
-                                                    radiusAppx += Math.Abs(Vector3.Distance(samplePosition, groupedVertexPositions[v])) * groupedVertexWeights[v][w] * distanceFalloff;
-                                                    weightSum += groupedVertexWeights[v][w] * distanceFalloff;
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                nodeParam.Radius = radiusAppx / weightSum;
+                                nodeParam.Radius = GetCylinderRadius(nodeTranslation, nodeChildTranslation, nodeBoneIndex);
                             }
                             else
                             {
                                 Vector3 nodeEnd = nodeTranslation + Vector3.Transform(Vector3.UnitX * node.Length, nodeRotation);
 
                                 int nodeBoneIndex = Data.Bones.IndexOf(nodeBoneInfo);
-
-                                float radiusAppx = 0.0f;
-                                float weightSum = 0.0f;
-
-                                for (int v = 0; v < sumNumVertices; v++)
-                                {
-                                    for (int w = 0; w < 4; w++)
-                                    {
-                                        if (remappedVertexIndices[v][w] == nodeBoneIndex)
-                                        {
-                                            if (groupedVertexWeights[v][w] >= 0.25)
-                                            {
-                                                for (int o = 0; o < 1; o++)
-                                                {
-                                                    Vector3 samplePosition = Vector3.Lerp(nodeTranslation, nodeEnd, 0.5f);
-                                                    float vertexDistance = Math.Clamp(Math.Abs(Vector3.Distance(samplePosition, groupedVertexPositions[v])), 0.0f, node.Length / 2);
-                                                    float distanceFalloff = (1.0f / (1.0f + vertexDistance * vertexDistance));
-                                                    radiusAppx += Math.Abs(Vector3.Distance(samplePosition, groupedVertexPositions[v])) * groupedVertexWeights[v][w] * distanceFalloff;
-                                                    weightSum += groupedVertexWeights[v][w] * distanceFalloff;
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                nodeParam.Radius = radiusAppx / weightSum;
+                                nodeParam.Radius = GetCylinderRadius(nodeTranslation, nodeEnd, nodeBoneIndex);
                             }
 
                             var collisionCandidates = collisionParameters.Select(colParam =>
@@ -611,11 +578,8 @@ public class SkinNode : Node<Skin>
                                 float tailDistance = Math.Abs(Vector3.Distance(nodeTranslation, colTailTranslation));
 
                                 float avgDistance = 0.0f;
-                                for (int i = 0; i < 1; i++)
-                                {
-                                    Vector3 samplePosition = Vector3.Lerp(colHeadTranslation, colTailTranslation, 0.5f);
-                                    avgDistance += Math.Abs(Vector3.Distance(nodeTranslation, samplePosition));
-                                }
+                                Vector3 samplePosition = (colHeadTranslation + colTailTranslation) / 2.0f;
+                                avgDistance += Math.Abs(Vector3.Distance(nodeTranslation, samplePosition));
 
 
                                 return new { Parameter = colParam, HeadDistance = avgDistance / 10.0f };
@@ -648,7 +612,7 @@ public class SkinNode : Node<Skin>
                     param.RotationY = 0.000000f;
                     param.RotationZ = 0.000000f;
                     param.Stiffness = 0.000000f;
-                    param.WindAffection = 0.000000f;
+                    param.WindAffection = 0.500000f;
 
                     skp.Parameters.Add(param);
 
