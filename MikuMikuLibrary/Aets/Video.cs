@@ -20,6 +20,35 @@ public class VideoSource
     }
 }
 
+public class MiraiVideoSource : VideoSource
+{
+    internal int NameIndex { get; set; }
+    new internal void Read(EndianBinaryReader reader)
+    {
+        NameIndex = reader.ReadInt32();
+        Id = reader.ReadUInt32();
+    }
+
+    new internal void Write(EndianBinaryWriter writer)
+    {
+        throw new NotImplementedException();
+    }
+
+    public VideoSource GetClassicVideoSource()
+    {
+        return new VideoSource
+        {
+            Name = this.Name,
+            Id = this.Id
+        };
+    }
+
+    public MiraiVideoSource() : base()
+    {
+
+    }
+}
+
 public class Video
 {
     internal long ReferenceOffset { get; private set; }
@@ -73,5 +102,50 @@ public class Video
     public Video()
     {
         Sources = new List<VideoSource>();
+    }
+}
+
+public class MiraiVideo : Video
+{
+    new internal void Read(EndianBinaryReader reader)
+    {
+        Color = reader.ReadVector4(VectorBinaryFormat.UInt8);
+        Width = reader.ReadUInt16();
+        Height = reader.ReadUInt16();
+        Frames = reader.ReadSingle();
+        int sourceCount = reader.ReadInt32();
+        reader.ReadOffset(() =>
+        {
+            Sources.Capacity = sourceCount;
+            for (int i = 0; i < sourceCount; i++)
+            {
+                var source = new MiraiVideoSource();
+                source.Read(reader);
+                Sources.Add(source);
+            }
+        });
+    }
+    new internal void Write(EndianBinaryWriter writer)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Video GetClassicVideo()
+    {
+        var classicVideo = new Video
+        {
+            Color = this.Color,
+            Width = this.Width,
+            Height = this.Height,
+            Frames = this.Frames
+        };
+        foreach (var source in this.Sources)
+        {
+            classicVideo.Sources.Add(source);
+        }
+        return classicVideo;
+    }
+    public MiraiVideo() : base()
+    {
     }
 }

@@ -1,4 +1,5 @@
-﻿using MikuMikuLibrary.IO.Common;
+﻿using MikuMikuLibrary.Hashes;
+using MikuMikuLibrary.IO.Common;
 
 namespace MikuMikuLibrary.Aets;
 
@@ -126,5 +127,108 @@ public class Scene
         Compositions = new List<Composition>();
         Videos = new List<Video>();
         Audios = new List<Audio>();
+    }
+}
+
+public class MiraiScene : Scene
+{
+    new internal void Read(EndianBinaryReader reader)
+    {
+        StartFrame = reader.ReadSingle();
+        EndFrame = reader.ReadSingle();
+        FrameRate = reader.ReadSingle();
+
+        BackgroundColor = reader.ReadVector4(VectorBinaryFormat.UInt8);
+        Width = reader.ReadInt32();
+        Height = reader.ReadInt32();
+
+        long cameraOffset = reader.ReadOffset();
+        int compositionCount = reader.ReadInt32();
+        long compositionsOffset = reader.ReadOffset();
+        int videoCount = reader.ReadInt32();
+        long videosOffset = reader.ReadOffset();
+
+        Console.WriteLine($"Video Count: {videoCount}");
+
+        //  seemingly different in mirai AETs. no clue what it actually is. might not exist at all.
+        //int audioCount = reader.ReadInt32();
+        //long audiosOffset = reader.ReadOffset();
+
+        reader.ReadAtOffset(cameraOffset, () =>
+        {
+            Camera = new Camera();
+            Camera.Read(reader);
+        });
+
+        reader.ReadAtOffset(compositionsOffset, () =>
+        {
+            Compositions.Capacity = compositionCount;
+
+            for (int i = 0; i < compositionCount; i++)
+            {
+                var composition = new Composition();
+                composition.Read(reader);
+                Compositions.Add(composition);
+            }
+        });
+
+        reader.ReadAtOffset(videosOffset, () =>
+        {
+            Videos.Capacity = videoCount;
+
+            for (int i = 0; i < videoCount; i++)
+            {
+                var video = new MiraiVideo();
+                video.Read(reader);
+                Videos.Add(video);
+            }
+        });
+
+        foreach (var composition in Compositions)
+        {
+            foreach (var layer in composition.Layers)
+                layer.ResolveReferences(composition, this);
+        }
+    }
+    new internal void Write(EndianBinaryWriter writer)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Scene GetClassicScene()
+    {
+        Scene scene = new Scene
+        {
+            Name = this.Name,
+            StartFrame = this.StartFrame,
+            EndFrame = this.EndFrame,
+            FrameRate = this.FrameRate,
+            BackgroundColor = this.BackgroundColor,
+            Width = this.Width,
+            Height = this.Height,
+            Camera = this.Camera
+        };
+        foreach (var composition in this.Compositions)
+        {
+            scene.Compositions.Add(composition);
+        }
+        foreach (var video in this.Videos)
+        {
+            foreach (var source in video.Sources)
+            {
+                source.Id = MurmurHash.Calculate(source.Name);
+            }
+            scene.Videos.Add(video);
+        }
+        foreach (var audio in this.Audios)
+        {
+            scene.Audios.Add(audio);
+        }
+        return scene;
+    }
+
+    public MiraiScene() : base()
+    {
+
     }
 }
